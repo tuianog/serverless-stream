@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  serverless-stream
+
+Transform:
+- AWS::Serverless-2016-10-31
+
+Resources:
+  TestDataStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: serverless-stream-test
+      RetentionPeriodHours: 24
+      ShardCount: 1
+      StreamEncryption:
+        EncryptionType: KMS
+        KeyId: alias/aws/kinesis
+      StreamModeDetails: 
+        StreamMode: PROVISIONED
+  
+  TestDataStreamConsumer:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: test stream consumer
+      Runtime: nodejs16.x
+      Architectures:
+        - x86_64
+      Handler: build/src/stream-consumer/index.handler
+      Environment:
+        Variables:
+          tableName: serverless-stream-test-table
+          tableArn: !GetAtt TestDataTable.Arn
+      Events:
+        Stream:
+          Type: Kinesis
+          Properties:
+            Stream: !GetAtt TestDataStream.Arn
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 10
+            BisectBatchOnFunctionError: true
+            MaximumRetryAttempts: 3
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt TestDataStreamConsumerDLQ.Arn
+            StartingPosition: LATEST
+      MemorySize: 128
+      Timeout: 90
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+  TestDataStreamConsumerRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: serverless-stream-test-consumer-kinesis
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'kinesis:DescribeStream'
+              - 'kinesis:ListShards'
+              - 'kinesis:GetRecords'
+              - 'kinesis:GetShardIterator'
+            Resource: !GetAtt TestDataStream.Arn
+          - Effect: Allow
+            Action:
+              - 'dynamodb:PutItem'
+              - 'dynamodb:BatchWriteItem'
+            Resource: !GetAtt TestDataTable.Arn
+          - Effect: Allow
+            Action:
+              - 'sqs:SendMessage'
+            Resource: !GetAtt TestDataStreamConsumerDLQ.Arn
+      Roles:
+        - !Ref TestDataStreamConsumerRole
+
+  TestDataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: serverless-stream-test-table
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  TestDataStreamConsumerDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub serverless-stream-test-consumer-dlq
+      MessageRetentionPeriod: 1209600 # 14 days
+
+Outputs:
+  TestDataStreamConsumerArn:
+    Description: "TestDataStreamConsumer handler ARN"
+    Value: !GetAtt TestDataStreamConsumer.Arn
+  TestDataStreamArn:
+    Description: "TestDataStream ARN"
+    Value: !GetAtt TestDataStream.Arn
