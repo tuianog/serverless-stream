@@ -12,7 +12,7 @@ import { KinesisAdapter } from "../src/adapter/kinesis";
         date: new Date().toISOString(),
     });
 
-    const items = new Array(N).fill(undefined).map((_) => ({data: JSON.stringify(getTestPayload())}));
+    const items = new Array(N).fill(undefined).map((_) => ({partitionKey: 'new-test', data: JSON.stringify(getTestPayload())}));
     const r = await kinesisAdapter.putRecords(streamArn, items);
     console.log('result', {r});
 })()

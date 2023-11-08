@@ -25,7 +25,7 @@ Resources:
       Runtime: nodejs16.x
       Architectures:
         - x86_64
-      Handler: build/src/stream-consumer/index.handler
+      Handler: src/stream-consumer/stream-consumer/index.handler
       Environment:
         Variables:
           tableName: serverless-stream-test-table
@@ -45,10 +45,21 @@ Resources:
               OnFailure:
                 Destination: !GetAtt TestDataStreamConsumerDLQ.Arn
             StartingPosition: LATEST
+            FilterCriteria:
+              Filters:
+                - Pattern: '{ "partitionKey" : [{"suffix":"-test"}] }'
       MemorySize: 128
       Timeout: 90
       Policies:
         - AWSLambdaBasicExecutionRole
+    Metadata:
+        BuildMethod: esbuild
+        BuildProperties:
+          Minify: true
+          Target: es2020
+          Sourcemap: true
+          EntryPoints:
+            - src/stream-consumer/index.ts
 
   TestDataStreamConsumerRolePolicy:
     Type: AWS::IAM::Policy
