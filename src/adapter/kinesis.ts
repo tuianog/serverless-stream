@@ -52,9 +52,12 @@ export class KinesisAdapter {
         console.log('Result of put records', { streamArn, response });
 
         if (response.FailedRecordCount) {
-          const failedRecords = (response.Records ?? [])
-            .filter(({ ErrorCode }) => !!ErrorCode)
-            .map((_, i) => payloadsChunk[i]);
+          const failedRecords: PutRecordsDataInput[] = (response.Records ?? []).reduce((carry, {ErrorCode}, i) => {
+            if(!!ErrorCode) {
+              carry.push(payloadsChunk[i]);
+            }
+            return carry;
+          }, [] as PutRecordsDataInput[]);
           result.failedPayloads.push(...failedRecords);
         }
       }
